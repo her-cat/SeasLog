@@ -150,6 +150,11 @@ ZEND_BEGIN_ARG_INFO_EX(seaslog_flushbuffer_arginfo, 0, 0, 0)
 ZEND_ARG_INFO(0, type)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(seaslog_logf_common_arginfo, 0, 0, 1)
+ZEND_ARG_INFO(0, format)
+ZEND_ARG_VARIADIC_INFO(0, args)
+ZEND_END_ARG_INFO()
+
 const zend_function_entry seaslog_functions[] =
 {
     PHP_FE(seaslog_get_version, seaslog_get_version_arginfo)
@@ -198,6 +203,7 @@ const zend_function_entry seaslog_methods[] =
     PHP_ME(SEASLOG_RES_NAME, critical,      seaslog_log_common_arginfo, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(SEASLOG_RES_NAME, alert,         seaslog_log_common_arginfo, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(SEASLOG_RES_NAME, emergency,     seaslog_log_common_arginfo, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(SEASLOG_RES_NAME, debugf,        seaslog_logf_common_arginfo, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
 
     {
         NULL, NULL, NULL
@@ -580,6 +586,37 @@ static void seaslog_log_by_level_common(INTERNAL_FUNCTION_PARAMETERS, char *leve
     }
 
 #endif
+
+    RETURN_TRUE;
+}
+
+static void seaslog_logf_by_level_common(INTERNAL_FUNCTION_PARAMETERS, char *level, int level_int)
+{
+    int argc;
+    zval *argv, message, function_name;
+
+    ZEND_PARSE_PARAMETERS_START(1, -1)
+            Z_PARAM_VARIADIC('+', argv, argc)
+    ZEND_PARSE_PARAMETERS_END_EX(RETURN_FALSE);
+
+    ZVAL_STRING(&function_name, "sprintf");
+
+    if (call_user_function(EG(function_table), NULL, &function_name, &message, argc, argv) != SUCCESS)
+    {
+        ZVAL_NULL(&message);
+    }
+
+    zval_dtor(&function_name);
+    /* we have no chance to return to ZendVM to check the exception  */
+    if (UNEXPECTED(EG(exception)))
+    {
+        zend_exception_error(EG(exception), E_ERROR);
+    }
+
+    if (FAILURE == seaslog_log_by_level_common_ex(ZEND_NUM_ARGS(), ZEND_NUM_ARGS(), level, level_int, &message, NULL, "", 0, seaslog_ce TSRMLS_CC))
+    {
+        RETURN_FALSE;
+    }
 
     RETURN_TRUE;
 }
@@ -1336,6 +1373,14 @@ PHP_METHOD(SEASLOG_RES_NAME, alert)
 PHP_METHOD(SEASLOG_RES_NAME, emergency)
 {
     seaslog_log_by_level_common(INTERNAL_FUNCTION_PARAM_PASSTHRU, SEASLOG_EMERGENCY, SEASLOG_EMERGENCY_INT);
+}
+/* }}} */
+
+/* {{{ proto bool debugf(string format [, mixed arg1 [, mixed ...])
+   Record debug log information */
+PHP_METHOD(SEASLOG_RES_NAME, debugf)
+{
+    seaslog_logf_by_level_common(INTERNAL_FUNCTION_PARAM_PASSTHRU, SEASLOG_DEBUG, SEASLOG_DEBUG_INT);
 }
 /* }}} */
 
